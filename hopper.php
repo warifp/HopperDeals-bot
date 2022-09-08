@@ -182,8 +182,6 @@ function writeLog($location, $text, $config)
     fclose($file);
 }
 
-$hopperDeals = new HopperDeals();
-
 $banner = '
 _______  _______  ______  ______  _______  ______ 
 |   |   ||       ||   __ \|   __ \|    ___||   __ \
@@ -192,10 +190,28 @@ _______  _______  ______  ______  _______  ______
 ================================ HOPPER X WARIFP.CO
 ';
 echo $banner . "\n";
-$email = readline('[?] Enter Email: ');
+
+$randEmail = readline('[?] Random Mail? (y/n) : ');
+if ($randEmail == 'y') {
+    $emailExt = readline('[?] Ext Mail? (@gmail.com) : ');
+    echo "\n";
+} else if ($randEmail == 'n') {
+    $email = readline('[?] Email : ');
+    echo "\n";
+} else {
+    echo "[-] Error: Input Data\n\n";
+    exit;
+}
+
+register:
+$hopperDeals = new HopperDeals();
 $phoneNumber = $hopperDeals->phoneNumber();
 $firstName = $hopperDeals->getName();
 $lastName =  $hopperDeals->getName();
+
+if ($randEmail == 'y') {
+    $email = strtolower($firstName) . strtolower($lastName) . $emailExt;
+}
 
 echo "[+] [ " . $email . " | " . $phoneNumber .  " | " . $firstName . " | " . $lastName . " ]\n";
 
@@ -222,7 +238,11 @@ if ($register) {
                 ];
                 writeLog('log/result.json', "\n" . json_encode($dataToSave), 'a+');
 
-                echo "[+] Register Successful, results saved in log/result.json \n";
+                echo "[+] Register Successful, results saved in log/result.json \n\n";
+
+                if ($randEmail == 'y') {
+                    goto register;
+                }
             }
 
             // echo '[!] Error on Input Data' . "\n";
