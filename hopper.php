@@ -15,6 +15,31 @@ class HopperDeals
         $this->hRequest = self::jwtGenerator();
     }
 
+    public function proxyChecker($socks5List)
+    {
+        $file_socks5 = file_get_contents($socks5List);
+        $socks5s = explode("\r\n", $file_socks5);
+        foreach ($socks5s as $socks5) {
+            echo "[+] Connecting to proxy " . $socks5 . "\n";
+
+            $this->curl->setProxy($socks5);
+            $this->curl->setProxyType(CURLPROXY_SOCKS5);
+            $this->curl->get('https://httpbin.org/ip');
+
+            if (isset($this->curl->response->origin)) {
+                $responseData = [
+                    'connected' => true,
+                    'proxy' => $socks5,
+                    'ip' => $this->curl->response->origin,
+                ];
+                return $responseData;
+            }
+        }
+
+        echo "[-] No Proxy Connected\n\n";
+        exit;
+    }
+
     public function jwtGenerator()
     {
         $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
@@ -28,8 +53,10 @@ class HopperDeals
         return $jwt;
     }
 
-    public function register($email)
+    public function register($email, $socks5)
     {
+        $this->curl->setProxy($socks5);
+        $this->curl->setProxyType(CURLPROXY_SOCKS5);
         $this->curl->setHeader('Host', 'deals.hopper.com');
         $this->curl->setTimeout(50);
         $this->curl->setConnectTimeout(50);
@@ -53,14 +80,18 @@ class HopperDeals
 
         if ($this->curl->error) {
             echo '[-] Error: Register - ' . $this->curl->errorCode . ': ' . $this->curl->errorMessage . "\n\n";
+
+            var_dump($this->curl->response);
         } else {
             $responseData = $this->curl->response;
             return $responseData;
         }
     }
 
-    public function verificationOTP($otpCode, $email, $token)
+    public function verificationOTP($otpCode, $email, $token, $socks5)
     {
+        $this->curl->setProxy($socks5);
+        $this->curl->setProxyType(CURLPROXY_SOCKS5);
         $this->curl->setHeader('Host', 'deals.hopper.com');
         $this->curl->setTimeout(50);
         $this->curl->setConnectTimeout(50);
@@ -90,8 +121,10 @@ class HopperDeals
         }
     }
 
-    public function inputData($firstName, $lastName, $token, $phoneNumber)
+    public function inputData($firstName, $lastName, $token, $phoneNumber, $socks5)
     {
+        $this->curl->setProxy($socks5);
+        $this->curl->setProxyType(CURLPROXY_SOCKS5);
         $this->curl->setHeader('Host', 'deals.hopper.com');
         $this->curl->setTimeout(50);
         $this->curl->setConnectTimeout(50);
@@ -191,6 +224,7 @@ _______  _______  ______  ______  _______  ______
 ';
 echo $banner . "\n";
 
+$socks5List = readline('[?] SOCKS5 List? : ');
 $randEmail = readline('[?] Random Mail? (y/n) : ');
 if ($randEmail == 'y') {
     $emailExt = readline('[?] Ext Mail? (@gmail.com) : ');
@@ -205,52 +239,62 @@ if ($randEmail == 'y') {
 
 register:
 $hopperDeals = new HopperDeals();
-$phoneNumber = $hopperDeals->phoneNumber();
-$firstName = $hopperDeals->getName();
-$lastName =  $hopperDeals->getName();
+$proxyChecker = $hopperDeals->proxyChecker($socks5List);
 
-if ($randEmail == 'y') {
-    $email = strtolower($firstName) . strtolower($lastName) . $emailExt;
-}
+if (isset(($proxyChecker))) {
+    $phoneNumber = $hopperDeals->phoneNumber();
+    $firstName = $hopperDeals->getName();
+    $lastName =  $hopperDeals->getName();
 
-echo "[+] [ " . $email . " | " . $phoneNumber .  " | " . $firstName . " | " . $lastName . " ]\n";
+    if ($randEmail == 'y') {
+        $email = strtolower($firstName) . strtolower($lastName) . $emailExt;
+    }
 
-$register = $hopperDeals->register($email);
-if ($register) {
-    if ($register->SignInResponse == 'Success') {
-        $otp = readline('[?] Enter OTP Code: ');
-        $verificationOTP = $hopperDeals->verificationOTP($otp, $email, $register->token);
+    echo "\n[+] Proxy SOCKS5 " . $proxyChecker['proxy']  . " - " . $proxyChecker['ip'] . " is connected.\n\n";
+    echo "[+] [ " . $email . " | " . $phoneNumber .  " | " . $firstName . " | " . $lastName . " ]\n";
 
-        if ($verificationOTP->VerifyCodeResponse == 'Success') {
-            $inputData = $hopperDeals->inputData($firstName, $lastName, $verificationOTP->token, $phoneNumber);
+    $register = $hopperDeals->register($email, $proxyChecker['proxy']);
+    if ($register) {
+        if ($register->SignInResponse == 'Success') {
+            writeLog('log/proxy_live_used.json', "\n" . $proxyChecker['proxy'], 'a+');
 
-            if ($inputData->FinalizeResponse == 'Success') {
+            $otp = readline('[?] Enter OTP Code: ');
+            $verificationOTP = $hopperDeals->verificationOTP($otp, $email, $register->token, $proxyChecker['proxy']);
 
-                $dataToSave = [
-                    'email' => $email,
-                    'phoneNumber' => $phoneNumber,
-                    'firstName' => $firstName,
-                    'lastName' => $lastName,
-                    'token' => $verificationOTP->token,
-                    'userId' => $inputData->authenticationTokens->userId,
-                    'accessToken' => $inputData->authenticationTokens->accessToken,
-                    'refreshToken' => $inputData->authenticationTokens->refreshToken,
-                ];
-                writeLog('log/result.json', "\n" . json_encode($dataToSave), 'a+');
+            if ($verificationOTP->VerifyCodeResponse == 'Success') {
+                $inputData = $hopperDeals->inputData($firstName, $lastName, $verificationOTP->token, $phoneNumber, $proxyChecker['proxy']);
 
-                echo "[+] Register Successful, results saved in log/result.json \n\n";
+                if ($inputData->FinalizeResponse == 'Success') {
 
-                if ($randEmail == 'y') {
-                    goto register;
+                    $dataToSave = [
+                        'email' => $email,
+                        'phoneNumber' => $phoneNumber,
+                        'firstName' => $firstName,
+                        'lastName' => $lastName,
+                        'token' => $verificationOTP->token,
+                        'userId' => $inputData->authenticationTokens->userId,
+                        'accessToken' => $inputData->authenticationTokens->accessToken,
+                        'refreshToken' => $inputData->authenticationTokens->refreshToken,
+                    ];
+                    writeLog('log/result.json', "\n" . json_encode($dataToSave), 'a+');
+
+                    echo "[+] Register Successful, results saved in log/result.json \n\n";
+
+                    if ($randEmail == 'y') {
+                        goto register;
+                    }
                 }
-            }
 
-            // echo '[!] Error on Input Data' . "\n";
-            exit();
+                // echo '[!] Error on Input Data' . "\n";
+                exit();
+            }
+            echo '[!] Error [Verification OTP]: ' . $verificationOTP->message . "\n";
+            exit;
         }
-        echo '[!] Error [Verification OTP]: ' . $verificationOTP->message . "\n";
+        echo '[!] Error [Register]: ' . $register->Failure . "\n";
         exit;
     }
-    echo '[!] Error [Register]: ' . $register->Failure . "\n";
+} else {
+    echo "[-] No Proxy Connected\n\n";
     exit;
 }
