@@ -33,6 +33,9 @@ class HopperDeals
                     'ip' => $this->curl->response->origin,
                 ];
                 return $responseData;
+            } else {
+                writeLog('log/proxy_death.json', "\n" . $socks5, 'a+');
+                deleteString($socks5, $socks5List);
             }
         }
 
@@ -185,17 +188,6 @@ class HopperDeals
         }
     }
 
-    public function getName()
-    {
-        $this->curl->get('https://api.warifp.co/v1/name');
-
-        if ($this->curl->error) {
-            echo '[-] Error: Get Name - ' . $this->curl->errorCode . ': ' . $this->curl->errorMessage . "\n\n";
-        } else {
-            return $this->curl->response->data->name;
-        }
-    }
-
     public function phoneNumber()
     {
         $phoneNumber = $this->fakerPhoneNumber->tollFreePhoneNumber();
@@ -213,6 +205,20 @@ function writeLog($location, $text, $config)
     $file = fopen($location, $config);
     fwrite($file, $text);
     fclose($file);
+}
+
+function deleteString($key, $file_name)
+{
+    $lines  = file($file_name);
+    $search = $key;
+
+    $result = '';
+    foreach ($lines as $line) {
+        if (stripos($line, $search) === false) {
+            $result .= $line;
+        }
+    }
+    file_put_contents($file_name, $result);
 }
 
 $banner = '
@@ -239,12 +245,13 @@ if ($randEmail == 'y') {
 
 register:
 $hopperDeals = new HopperDeals();
+$fakerName = $faker = Faker\Factory::create('Faker\Provider\en_US\Person');
 $proxyChecker = $hopperDeals->proxyChecker($socks5List);
 
 if (isset(($proxyChecker))) {
     $phoneNumber = $hopperDeals->phoneNumber();
-    $firstName = $hopperDeals->getName();
-    $lastName =  $hopperDeals->getName();
+    $firstName = (string)$fakerName->firstName;
+    $lastName =  (string)$fakerName->lastName;
 
     if ($randEmail == 'y') {
         $email = strtolower($firstName) . strtolower($lastName) . $emailExt;
@@ -257,6 +264,7 @@ if (isset(($proxyChecker))) {
     if ($register) {
         if ($register->SignInResponse == 'Success') {
             writeLog('log/proxy_live_used.json', "\n" . $proxyChecker['proxy'], 'a+');
+            deleteString($proxyChecker['proxy'], $socks5List);
 
             $otp = readline('[?] Enter OTP Code: ');
             $verificationOTP = $hopperDeals->verificationOTP($otp, $email, $register->token, $proxyChecker['proxy']);
