@@ -232,7 +232,7 @@ _______  _______  ______  ______  _______  ______
 echo $banner . "\n";
 
 $socks5List = readline('[?] SOCKS5 List? : ');
-$randEmail = readline('[?] Random Mail? (y/n) : ');
+$randEmail = 'n';
 if ($randEmail == 'y') {
     $emailExt = readline('[?] Ext Mail? (@gmail.com) : ');
     echo "\n";
